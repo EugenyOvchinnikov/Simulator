@@ -1,9 +1,11 @@
 #define _CRT_SECURE_NO_WARNINGS
-#include <iostream>
-#include <set>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
+#include <set>
 #include <stdio.h>
+
+void makeDeal(int& id, char side, int oid1, int oid2, int qty, double price);
 
 struct Order
 {
@@ -12,17 +14,27 @@ struct Order
     int m_qty;      // количество
     double m_price; // цена
 
-    Order(int oid, char side, int qty, double price) : m_oid(oid), m_side(side), m_qty(qty), m_price(price) {}
+    Order(int oid = 0, char side = ' ', int qty = 0, double price = 0)
+        : m_oid(oid)
+        , m_side(side)
+        , m_qty(qty)
+        , m_price(price)
+    {
+    }
 };
 
 //заявки на покупку
 struct SellOrder : Order
 {
-    SellOrder(int oid, char side, int qty, double price) : Order(oid, side, qty, price) {}
-
-    friend bool operator< (const SellOrder& lhs, const SellOrder& rhs)
+    SellOrder(int oid, char side, int qty, double price)
+        : Order(oid, side, qty, price)
     {
-        return  lhs.m_price < rhs.m_price;    // перегрузка оператора < для сортировки по цене
+    }
+
+    friend bool operator<(const SellOrder& lhs, const SellOrder& rhs)
+    {
+        // перегрузка оператора < для сортировки по возрастанию цены
+        return lhs.m_price < rhs.m_price;
     }
 };
 
@@ -31,177 +43,251 @@ struct BuyOrder : Order
 {
     BuyOrder(int oid, char side, int qty, double price) : Order(oid, side, qty, price) {}
 
-    friend bool operator< (const BuyOrder& lhs, const BuyOrder& rhs)
+    friend bool operator<(const BuyOrder& lhs, const BuyOrder& rhs)
     {
-        return  lhs.m_price > rhs.m_price;    // перегрузка оператора < для сортировки по цене
+        // перегрузка оператора < для сортировки по убыванию цены
+        return lhs.m_price > rhs.m_price;
     }
 };
 
-int main()
+class WorkOrder
 {
-    FILE * inputFile;
-
-    inputFile = fopen ("input.txt","r");
-
-    // Если мы не можем открыть этот файл для чтения данных,
-    if (!inputFile)
-    {
-        // то выводим сообщение об ошибке и выполняем функцию exit()
-        std::cerr << "input.txt could not be opened!" << std::endl;
-        exit(1);
-    }
-
-    std::ofstream outputFile("output_simulator.txt");
-
-
-    // Если мы не можем открыть этот файл для записи данных,
-    if (!outputFile)
-    {
-        // то выводим сообщение об ошибке и выполняем функцию exit()
-        std::cerr << "output_simulator.txt could not be opened for writing!" << std::endl;
-        exit(1);
-    }
-
-    std::multiset <SellOrder> sellOrders;
-    std::multiset <SellOrder>::iterator it_sellOrders;
-
-    std::multiset <BuyOrder> buyOrders;
-    std::multiset <BuyOrder>::iterator it_buyOrders;
-
-    char uid;
-    int oid, now_oid;
-    char side, now_side;
-    int qty, now_qty;
-    double price, now_price;
-
-    int id = 0;
+public:
     int order_complete;
+    int now_oid;
+    char now_side;
+    int now_qty;
+    double now_price;
 
-    std::cout << std::setprecision(2) << std::fixed;
-
-    while (fscanf(inputFile, "%c, %d, %c, %d, %lf%с", &uid, &oid, &side, &qty, &price) != EOF)
+    void makeSellOrder(std::multiset<SellOrder>& sellOrders,
+                       std::multiset<SellOrder>::iterator& it_sellOrders,
+                       std::multiset<BuyOrder>& buyOrders,
+                       std::multiset<BuyOrder>::iterator& it_buyOrders,
+                       SellOrder& sellorder, int &id)
     {
-        // добавление заявки
-        if (uid == 'O')
+        order_complete = 0;
+
+        // проверяем наличие заявки на покупку
+        for (it_buyOrders = buyOrders.begin(); it_buyOrders != buyOrders.end();)
         {
-            // заявка на продажу
-            if (side == 'S')
+            now_oid = (*it_buyOrders).m_oid;
+            now_side = (*it_buyOrders).m_side;
+            now_qty = (*it_buyOrders).m_qty;
+            now_price = (*it_buyOrders).m_price;
+
+            if (now_price >= sellorder.m_price) // найдена заявка на покупку
             {
-                order_complete = 0;
-
-                for (it_buyOrders = buyOrders.begin(); it_buyOrders != buyOrders.end();)   // проверяем наличие заявки на покупку
+                if (now_qty > sellorder.m_qty) // количество покупки больше количества продажи
                 {
-                    if ((*it_buyOrders).m_price >= price)   // найдена заявка на покупку
-                    {
-                        ++id; // счетчик сделок
-
-                        if ((*it_buyOrders).m_qty > qty) // количество покупки больше количества продажи
-                        {
-                            now_oid = (*it_buyOrders).m_oid;
-                            now_side = (*it_buyOrders).m_side;
-                            now_qty= (*it_buyOrders).m_qty - qty;
-                            now_price = (*it_buyOrders).m_price;
-
-                            outputFile << "T," << id << ",B," << (*it_buyOrders).m_oid << "," << oid << "," << qty << "," << (*it_buyOrders).m_price << "\n"; // выводим сделку
-                            buyOrders.erase(it_buyOrders); // удаляем заявку покупки
-                            buyOrders.emplace(BuyOrder(now_oid, now_side, now_qty, now_price));   // возвращаем заявку покупки с новым количеством
-                            order_complete = 1;
-                            break;
-                        }
-                        if ((*it_buyOrders).m_qty == qty) // количество покупки равно количеству продажи
-                        {
-                            outputFile << "T," << id << ",B," << (*it_buyOrders).m_oid << "," << oid << "," << qty << "," << (*it_buyOrders).m_price << "\n"; // выводим сделку
-                            buyOrders.erase(it_buyOrders); // удаляем заявку покупки
-                            order_complete = 1;
-                            break;
-                        }
-                        if ((*it_buyOrders).m_qty < qty) // количество покупки меньше количества продажи
-                        {
-                            qty = qty - (*it_buyOrders).m_qty;
-                            outputFile << "T," << id << ",B," << (*it_buyOrders).m_oid << "," << oid << "," << (*it_buyOrders).m_qty << "," << (*it_buyOrders).m_price << "\n"; // выводим сделку
-                            buyOrders.erase(it_buyOrders++); // удаляем заявку покупки
-                        }
-                    }
-                    else
-                    {
-                        ++it_buyOrders;
-                    }
+                    // выводим сделку
+                    makeDeal(id, 'B', now_oid, sellorder.m_oid, sellorder.m_qty, now_price);
+                    buyOrders.erase(it_buyOrders); // удаляем заявку покупки
+                    // возвращаем заявку покупки с новым количеством
+                    buyOrders.emplace(
+                        BuyOrder(now_oid, now_side, (now_qty - sellorder.m_qty), now_price));
+                    order_complete = 1;
+                    break;
                 }
-               if (order_complete == 0) sellOrders.insert(SellOrder(oid, side, qty, price));   // заявок на покупку нет или заявка выполнена не полностью, добавляем заявку продажи               
+                if (now_qty == sellorder.m_qty) // количество покупки равно количеству продажи
+                {
+                    // выводим сделку
+                    makeDeal(id, 'B', now_oid, sellorder.m_oid, sellorder.m_qty, now_price);
+                    buyOrders.erase(it_buyOrders); // удаляем заявку покупки
+                    order_complete = 1;
+                    break;
+                }
+                if (now_qty < sellorder.m_qty) // количество покупки меньше количества продажи
+                {
+                    sellorder.m_qty = sellorder.m_qty - now_qty;
+                    // выводим сделку
+                    makeDeal(id, 'B', now_oid, sellorder.m_oid, now_qty, now_price);
+                    buyOrders.erase(it_buyOrders++); // удаляем заявку покупки
+                }
             }
-            // заявка на покупку
-            else if (side == 'B')
+            else
             {
-                order_complete = 0;
-
-                for (it_sellOrders = sellOrders.begin(); it_sellOrders != sellOrders.end();)   // проверяем наличие заявки на продажу
-                {
-                    if ((*it_sellOrders).m_price <= price)   // найдена заявка на продажу
-                    {
-                        ++id; // счетчик сделок
-
-                        if ((*it_sellOrders).m_qty > qty) // количество продажи больше количества покупки
-                        {
-                            now_oid = (*it_sellOrders).m_oid;
-                            now_side = (*it_sellOrders).m_side;
-                            now_qty= (*it_sellOrders).m_qty - qty;
-                            now_price = (*it_sellOrders).m_price;
-
-                            outputFile << "T," << id << ",S," << (*it_sellOrders).m_oid << "," << oid << "," << qty << "," << (*it_sellOrders).m_price << "\n"; // выводим сделку
-                            sellOrders.erase(it_sellOrders); // удаляем заявку продажи
-                            sellOrders.emplace(SellOrder(now_oid, now_side, now_qty, now_price));   // возвращаем заявку продажи с новым количеством
-                            order_complete = 1;
-                            break;
-                        }
-                        if ((*it_sellOrders).m_qty == qty) // количество продажи равно количеству покупки
-                        {
-                            outputFile << "T," << id << ",S," << (*it_sellOrders).m_oid << "," << oid << "," << qty << "," << (*it_sellOrders).m_price << "\n"; // выводим сделку
-                            sellOrders.erase(it_sellOrders); // удаляем заявку продажи
-                            order_complete = 1;
-                            break;
-                        }
-                        if ((*it_sellOrders).m_qty < qty) // количество продажи меньше количества покупки
-                        {
-                            qty = qty - (*it_sellOrders).m_qty;
-                            outputFile << "T," << id << ",S," << (*it_sellOrders).m_oid << "," << oid << "," << (*it_sellOrders).m_qty << "," << (*it_sellOrders).m_price << "\n"; // выводим сделку
-                            sellOrders.erase(it_sellOrders++); // удаляем заявку продажи
-                        }
-                    }
-                    else
-                    {
-                        ++it_sellOrders;
-                    }
-                }
-               if (order_complete == 0) buyOrders.emplace(BuyOrder(oid, side, qty, price));   // заявок на продажу нет или заявка выполнена не полностью, добавляем заявку покупки
+                ++it_buyOrders;
             }
         }
-        else
+        if (order_complete == 0)
         {
-            // отмена завки
-            if (uid == 'C')
+            // заявок на покупку нет или заявка выполнена не полностью, добавляем
+            // заявку продажи
+            sellOrders.emplace(sellorder);
+        }
+    }
+    void makeBuyOrder(std::multiset<SellOrder>& sellOrders,
+                      std::multiset<SellOrder>::iterator& it_sellOrders,
+                      std::multiset<BuyOrder>& buyOrders,
+                      std::multiset<BuyOrder>::iterator& it_buyOrders,
+                      BuyOrder& buyorder, int& id)
+    {
+        order_complete = 0;
+
+        // проверяем наличие заявки на продажу
+        for (it_sellOrders = sellOrders.begin(); it_sellOrders != sellOrders.end();)
+        {
+            now_oid = (*it_sellOrders).m_oid;
+            now_side = (*it_sellOrders).m_side;
+            now_qty = (*it_sellOrders).m_qty;
+            now_price = (*it_sellOrders).m_price;
+
+            if (now_price <= buyorder.m_price) // найдена заявка на продажу
             {
-                    for (it_sellOrders = sellOrders.begin(); it_sellOrders != sellOrders.end(); it_sellOrders++)
-                    {
-                        if ((*it_sellOrders).m_oid == oid)
-                        {
-                            sellOrders.erase(it_sellOrders);
-                            outputFile << "X," << oid << "\n";
-                            break;
-                        }
-                    }
-                    for (it_buyOrders = buyOrders.begin(); it_buyOrders != buyOrders.end(); it_buyOrders++)
-                    {
-                        if ((*it_buyOrders).m_oid == oid)
-                        {
-                            buyOrders.erase(it_buyOrders);
-                            outputFile << "X," << oid << "\n";
-                            break;
-                        }
-                    }
+                if (now_qty > buyorder.m_qty) // количество продажи больше количества покупки
+                {
+                    // выводим сделку
+                    makeDeal(id, 'S', now_oid, buyorder.m_oid, buyorder.m_qty, now_price);
+                    sellOrders.erase(it_sellOrders); // удаляем заявку продажи
+                    // возвращаем заявку продажи с новым количеством
+                    sellOrders.emplace(
+                        SellOrder(now_oid, now_side, (now_qty - buyorder.m_qty), now_price));
+                    order_complete = 1;
+                    break;
+                }
+                if (now_qty == buyorder.m_qty) // количество продажи равно количеству покупки
+                {
+                    // выводим сделку
+                    makeDeal(id, 'S', now_oid, buyorder.m_oid, buyorder.m_qty, now_price);
+                    sellOrders.erase(it_sellOrders); // удаляем заявку продажи
+                    order_complete = 1;
+                    break;
+                }
+                if (now_qty < buyorder.m_qty) // количество продажи меньше количества покупки
+                {
+                    buyorder.m_qty = buyorder.m_qty - now_qty;
+                    // выводим сделку
+                    makeDeal(id, 'S', now_oid, buyorder.m_oid, now_qty, now_price);
+                    sellOrders.erase(it_sellOrders++); // удаляем заявку продажи
+                }
             }
-        }      
+            else
+            {
+                ++it_sellOrders;
+            }
+        }
+        if (order_complete == 0)
+        {
+            // заявок на продажу нет или заявка выполнена не
+            // полностью, добавляем заявку покупки
+            buyOrders.emplace(buyorder);
+        }
     }
 
-    fclose (inputFile);
-    return 0;
-}
+        void cancelOrder(std::multiset<SellOrder> & sellOrders,
+                         std::multiset<SellOrder>::iterator & it_sellOrders,
+                         std::multiset<BuyOrder> & buyOrders,
+                         std::multiset<BuyOrder>::iterator & it_buyOrders,
+                         int oid)
+        {
+            std::ofstream outputFile("output_simulator.txt", std::ios::app);
+
+            // Если мы не можем открыть этот файл для записи данных,
+            if (!outputFile)
+            {
+                // то выводим сообщение об ошибке и выполняем функцию exit()
+                std::cerr << "output_simulator.txt could not be opened for writing!" << std::endl;
+                exit(1);
+            }
+
+            for (it_sellOrders = sellOrders.begin(); it_sellOrders != sellOrders.end();
+                 it_sellOrders++)
+            {
+                if ((*it_sellOrders).m_oid == oid)
+                {
+                    sellOrders.erase(it_sellOrders);
+                    outputFile << "X," << oid << "\n"; // выводим сделку
+                    break;
+                }
+            }
+            for (it_buyOrders = buyOrders.begin(); it_buyOrders != buyOrders.end(); it_buyOrders++)
+            {
+                if ((*it_buyOrders).m_oid == oid)
+                {
+                    buyOrders.erase(it_buyOrders);
+                    outputFile << "X," << oid << "\n"; // выводим сделку
+                    break;
+                }
+            }
+            outputFile.close();
+        }
+    };
+
+    void makeDeal(int& id, char side, int oid1, int oid2, int qty, double price)
+    {
+        std::ofstream outputFile("output_simulator.txt", std::ios::app);
+
+        // Если мы не можем открыть этот файл для записи данных,
+        if (!outputFile)
+        {
+            // то выводим сообщение об ошибке и выполняем функцию exit()
+            std::cerr << "output_simulator.txt could not be opened for writing!" << std::endl;
+            exit(1);
+        }
+
+        //    std::cout << std::setprecision(2) << std::fixed;
+        outputFile << "T," << ++id << "," << side << "," << oid1 << "," << oid2 << "," << qty << ","
+                   << price << "\n"; // выводим сделку
+        outputFile.close();
+    }
+
+    int main()
+    {
+        FILE* inputFile;
+
+        inputFile = fopen("input.txt", "r");
+
+        // Если мы не можем открыть этот файл для чтения данных,
+        if (!inputFile)
+        {
+            // то выводим сообщение об ошибке и выполняем функцию exit()
+            std::cerr << "input.txt could not be opened!" << std::endl;
+            exit(1);
+        }
+
+        std::multiset<SellOrder> sellOrders;
+        std::multiset<SellOrder>::iterator it_sellOrders;
+
+        std::multiset<BuyOrder> buyOrders;
+        std::multiset<BuyOrder>::iterator it_buyOrders;
+
+        char uid;
+        int oid;
+        char side;
+        int qty;
+        double price;
+        int id = 0; // счетчик сделок
+
+        std::cout << std::setprecision(2) << std::fixed;
+
+        while (fscanf(inputFile, "%c, %d, %c, %d, %lf%с", &uid, &oid, &side, &qty, &price) != EOF)
+        {
+            // анализ заявки
+            switch (uid)
+            {
+                case 'O':
+                    switch (side)
+                    {
+                        // заявка на продажу
+                        case 'S':
+                        {
+                            SellOrder sellorder(oid, side, qty, price);
+                            (new WorkOrder) ->makeSellOrder(sellOrders, it_sellOrders, buyOrders, it_buyOrders, sellorder, id);
+                            break;
+                        }
+                        // заявка на покупку
+                        case 'B':
+                            BuyOrder buyorder(oid, side, qty, price);
+                            (new WorkOrder) ->makeBuyOrder(sellOrders, it_sellOrders, buyOrders, it_buyOrders, buyorder, id);
+                            break;
+                    }
+                    break;
+                // отмена завки
+                case 'C':
+                    (new WorkOrder) ->cancelOrder(sellOrders, it_sellOrders, buyOrders, it_buyOrders, oid);
+                    break;
+            }
+        }
+        fclose(inputFile);
+        return 0;
+    }
