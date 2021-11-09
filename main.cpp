@@ -47,6 +47,10 @@ struct BuyOrder : Order
 
 class TradeSystem
 {
+private:
+    std::multiset<SellOrder> sellOrders;
+    std::multiset<BuyOrder> buyOrders;
+
 public:
     int order_complete;
     int now_oid;
@@ -54,26 +58,30 @@ public:
     int now_qty;
     double now_price;
 
-    void makeSellOrder(std::multiset<SellOrder>& sellOrders,
-                       std::multiset<BuyOrder>& buyOrders,
-                       SellOrder& sellorder,
-                       int& id, std::ofstream& outputFile)
+    void makeSellOrder(SellOrder& sellorder, int& id, std::ofstream& outputFile)
     {
         order_complete = 0;
 
         // проверяем наличие заявки на покупку
         for (auto it = buyOrders.begin(); it != buyOrders.end();)
         {
-            now_price = it->m_price;
+            const auto& buyOrder = *it;
+            now_price = buyOrder.m_price;
             if (now_price >= sellorder.m_price) // найдена заявка на покупку
             {
-                now_oid = it->m_oid;
-                now_side = it->m_side;
-                now_qty = it->m_qty;
+                now_oid = buyOrder.m_oid;
+                now_side = buyOrder.m_side;
+                now_qty = buyOrder.m_qty;
                 if (now_qty > sellorder.m_qty) // количество покупки больше количества продажи
                 {
                     // выводим сделку
-                    makeDeal(id, 'B', now_oid, sellorder.m_oid, sellorder.m_qty, now_price, outputFile);
+                    makeDeal(id,
+                             'B',
+                             now_oid,
+                             sellorder.m_oid,
+                             sellorder.m_qty,
+                             now_price,
+                             outputFile);
                     buyOrders.erase(it); // удаляем заявку покупки
                     // возвращаем заявку покупки с новым количеством
                     buyOrders.emplace(
@@ -84,7 +92,13 @@ public:
                 if (now_qty == sellorder.m_qty) // количество покупки равно количеству продажи
                 {
                     // выводим сделку
-                    makeDeal(id, 'B', now_oid, sellorder.m_oid, sellorder.m_qty, now_price, outputFile);
+                    makeDeal(id,
+                             'B',
+                             now_oid,
+                             sellorder.m_oid,
+                             sellorder.m_qty,
+                             now_price,
+                             outputFile);
                     buyOrders.erase(it); // удаляем заявку покупки
                     order_complete = 1;
                     break;
@@ -109,26 +123,30 @@ public:
             sellOrders.emplace(sellorder);
         }
     }
-    void makeBuyOrder(std::multiset<SellOrder>& sellOrders,
-                      std::multiset<BuyOrder>& buyOrders,
-                      BuyOrder& buyorder,
-                      int& id, std::ofstream& outputFile)
+    void makeBuyOrder(BuyOrder& buyorder, int& id, std::ofstream& outputFile)
     {
         order_complete = 0;
 
         // проверяем наличие заявки на продажу
         for (auto it = sellOrders.begin(); it != sellOrders.end();)
         {
-            now_price = it->m_price;
+            const auto& sellOrder = *it;
+            now_price = sellOrder.m_price;
             if (now_price <= buyorder.m_price) // найдена заявка на продажу
             {
-                now_oid = it->m_oid;
-                now_side = it->m_side;
-                now_qty = it->m_qty;
+                now_oid = sellOrder.m_oid;
+                now_side = sellOrder.m_side;
+                now_qty = sellOrder.m_qty;
                 if (now_qty > buyorder.m_qty) // количество продажи больше количества покупки
                 {
                     // выводим сделку
-                    makeDeal(id, 'S', now_oid, buyorder.m_oid, buyorder.m_qty, now_price, outputFile);
+                    makeDeal(id,
+                             'S',
+                             now_oid,
+                             buyorder.m_oid,
+                             buyorder.m_qty,
+                             now_price,
+                             outputFile);
                     sellOrders.erase(it); // удаляем заявку продажи
                     // возвращаем заявку продажи с новым количеством
                     sellOrders.emplace(
@@ -139,7 +157,13 @@ public:
                 if (now_qty == buyorder.m_qty) // количество продажи равно количеству покупки
                 {
                     // выводим сделку
-                    makeDeal(id, 'S', now_oid, buyorder.m_oid, buyorder.m_qty, now_price, outputFile);
+                    makeDeal(id,
+                             'S',
+                             now_oid,
+                             buyorder.m_oid,
+                             buyorder.m_qty,
+                             now_price,
+                             outputFile);
                     sellOrders.erase(it); // удаляем заявку продажи
                     order_complete = 1;
                     break;
@@ -165,10 +189,7 @@ public:
         }
     }
 
-    void cancelOrder(std::multiset<SellOrder>& sellOrders,
-                     std::multiset<BuyOrder>& buyOrders,
-                     int& oid,
-                     std::ofstream& outputFile)
+    void cancelOrder(int& oid, std::ofstream& outputFile)
     {
         for (auto it = sellOrders.begin(); it != sellOrders.end(); it++)
         {
@@ -189,7 +210,8 @@ public:
             }
         }
     }
-    void makeDeal(int& id, char side, int oid1, int oid2, int qty, double price, std::ofstream& outputFile)
+    void makeDeal(
+        int& id, char side, int oid1, int oid2, int qty, double price, std::ofstream& outputFile)
     {
         outputFile << "T," << ++id << "," << side << "," << oid1 << "," << oid2 << "," << qty << ","
                    << price << "\n"; // выводим сделку
@@ -210,7 +232,7 @@ int main()
         exit(1);
     }
 
-//    std::ofstream outputFile("output_simulator.txt", std::ios::app);
+    //    std::ofstream outputFile("output_simulator.txt", std::ios::app);
     std::ofstream outputFile("output_simulator.txt");
 
     // Если мы не можем открыть этот файл для записи данных,
@@ -221,10 +243,7 @@ int main()
         exit(1);
     }
 
-    TradeSystem neworder;
-
-    std::multiset<SellOrder> sellOrders;
-    std::multiset<BuyOrder> buyOrders;
+    TradeSystem tradesystem;
 
     char uid;
     int oid;
@@ -247,28 +266,19 @@ int main()
                     case 'S':
                     {
                         SellOrder sellorder(oid, side, qty, price);
-                        neworder.makeSellOrder(sellOrders,
-                                            buyOrders,
-                                            sellorder,
-                                            id, outputFile);
+                        tradesystem.makeSellOrder(sellorder, id, outputFile);
                         break;
                     }
                     // заявка на покупку
                     case 'B':
                         BuyOrder buyorder(oid, side, qty, price);
-                        neworder.makeBuyOrder(sellOrders,
-                                           buyOrders,
-                                           buyorder,
-                                           id, outputFile);
+                        tradesystem.makeBuyOrder(buyorder, id, outputFile);
                         break;
                 }
                 break;
             // отмена завки
             case 'C':
-                neworder.cancelOrder(sellOrders,
-                                  buyOrders,
-                                  oid,
-                                  outputFile);
+                tradesystem.cancelOrder(oid, outputFile);
                 break;
         }
     }
